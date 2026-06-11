@@ -1,0 +1,1944 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Spiral</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300&display=swap" rel="stylesheet">
+<style>
+  /* ── 커스텀 서체 로드 (assets 폴더에 폰트 파일 넣기) ───────── */
+  @font-face {
+    font-family: 'TGFrekuentMono';
+    src: url('assets/FontsFree-Net-TG-Frekuent-Mono-Variable-1.ttf') format('truetype');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'JamGrotesque';
+    src: url('assets/Fontspring-DEMO-jamgrotesque-bold.otf') format('opentype');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'JamGrotesqueLight';
+    src: url('assets/Fontspring-DEMO-jamgrotesque-light.otf') format('opentype');
+    font-weight: 300;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: #ffffff;
+    overflow: hidden;
+    cursor: grab;
+  }
+  body.dragging { cursor: grabbing; }
+
+  #scene {
+    position: fixed; inset: 0; z-index: 1;
+    transition: filter 0.45s ease, opacity 0.45s ease;
+  }
+
+  #topNav {
+    position: fixed;
+    top: 34px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 130;
+    user-select: none;
+  }
+  #exhibitionLink .arrow {
+    display: inline-block;
+    margin-left: 0.18em;
+  }
+  #topNav button {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font-family: 'JamGrotesque', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    line-height: 1.2;
+    letter-spacing: 0.005em;
+    color: #111;
+    cursor: pointer;
+  }
+  #topNav button:focus,
+  #exhibitionBack:focus,
+  #topNav button:focus-visible,
+  #exhibitionBack:focus-visible {
+    outline: none;
+  }
+
+  /* ── 왼쪽 위 고정 텍스트 블록 (sfaubert.info 톤) ───────────── */
+  #info {
+    position: fixed; top: 34px; left: 34px; z-index: 82;
+    max-width: 360px;
+    pointer-events: none;          /* 뒤 나선 드래그를 막지 않음 */
+    user-select: none;
+    transition: opacity 0.4s ease, filter 0.45s ease;
+  }
+
+  /* ── 왼쪽 아래 고정 Collection Date (sfaubert.info 톤) ───────── */
+  #updated {
+    position: fixed; bottom: 34px; left: 34px; z-index: 82;
+    font-family: 'TGFrekuentMono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+    font-weight: 300;
+    font-size: 10px;
+    line-height: 1.6;
+    letter-spacing: 0.01em;
+    color: rgba(0,0,0,0.78);
+    pointer-events: none;
+    user-select: none;
+    transition: opacity 0.4s ease, filter 0.45s ease;
+  }
+  #updated .label {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  /* 날짜/시간 값 (새 가변 폰트 사용) */
+  #updated #updatedValue {
+    font-family: 'TGFrekuentMono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  }
+
+  /* ── 오른쪽 세로 카테고리 라벨 (위→아래 균등 간격, 오른쪽 정렬) ── */
+  #cats {
+    position: fixed; top: 34px; right: 34px; bottom: 34px; z-index: 82;
+    display: flex; flex-direction: column; justify-content: space-between;
+    align-items: flex-end;          /* 오른쪽 정렬 */
+    text-align: right;
+    font-family: 'TGFrekuentMono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+    font-weight: 300;
+    font-size: 10px;
+    line-height: 1.4;
+    letter-spacing: 0.01em;
+    color: rgba(0,0,0,0.78);
+    pointer-events: none;          /* 컨테이너는 클릭 통과, 각 라벨만 호버 받음 */
+    user-select: none;
+    transition: opacity 0.4s ease, filter 0.45s ease;
+  }
+  /* 확대(오버레이) 시 고정 텍스트도 나선 모션처럼 살짝 블러 */
+  body.overlay-open #info,
+  body.overlay-open #updated,
+  body.overlay-open #cats {
+    filter: blur(3px);
+  }
+
+  #cats > div {
+    pointer-events: auto;          /* 각 라벨은 호버 가능 */
+    cursor: default;
+    transition: opacity 0.2s ease;
+  }
+  #cats.has-hover > div { opacity: 0.35; }   /* 호버 중인 형제는 흐리게 */
+  #cats > div:hover { opacity: 1; }
+
+  /* ── 나선 확대/축소 +/- (테두리 없는 옅은 회색 심볼, 위아래 정렬) ── */
+  #zoom {
+    position: fixed; left: 34px; top: 50%; z-index: 95;  /* 텍스트 위 레이어 */
+    transform: translateY(-50%);                          /* 세로 중앙 */
+    display: flex; flex-direction: column; gap: 7px;
+    user-select: none;
+  }
+  #zoom button {
+    width: 27px; height: 27px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.18);     /* 회색 동그라미 */
+    border: none;
+    color: #ffffff;                   /* 흰색 심볼 */
+    font-family: 'Roboto', system-ui, sans-serif;
+    font-weight: 300;                 /* 라이트 */
+    font-size: 18px; line-height: 1;
+    cursor: pointer;                  /* 마우스 → 손가락 */
+    padding: 0;
+  }
+  /* 호버해도 색 변화 없음 (커서만 pointer) */
+
+  #info .title {
+    font-family: 'JamGrotesque', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    line-height: 1.2;
+    letter-spacing: 0.005em;
+    color: #111;
+    margin-bottom: 14px;
+  }
+  #info .desc {
+    font-family: 'TGFrekuentMono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+    font-weight: 300;
+    font-size: 10px;
+    line-height: 1.55;
+    letter-spacing: 0.01em;
+    color: rgba(0,0,0,0.78);
+    white-space: pre-line;         /* 줄바꿈/빈 줄 그대로 */
+  }
+
+  #loader {
+    position: fixed; inset: 0; z-index: 50;
+    background: #ffffff;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity 0.8s ease;
+  }
+  #loader.hidden { opacity: 0; pointer-events: none; }
+  .load-bar { width: 180px; height: 1px; background: rgba(0,0,0,0.12); position: relative; }
+  .load-bar i { position:absolute; left:0; top:0; height:100%; background: #111; width:0%; transition: width .25s; }
+
+  /* ── 이미지 확대 오버레이 ───────────────────────────────── */
+  #overlay {
+    position: fixed; inset: 0; z-index: 80;
+    /* 오버레이 자체는 거의 투명 → 뒤에서 도는 (블러된) 나선이 그대로 비침.
+       흰 바탕은 #scene 의 본래 흰 배경이 담당. */
+    background: rgba(255,255,255,0.1);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.45s ease;
+  }
+  /* 오버레이가 열리면 뒤 나선 씬 자체를 흐리게 → 도는 모습이 블러된 채 비침 */
+  body.overlay-open #scene { filter: blur(2px); }
+  body.exhibition-detail-open #overlay { z-index: 150; }
+  body.exhibition-detail-open #exhibitionScreen { filter: blur(2px); }
+  #overlay.show { opacity: 1; pointer-events: auto; }
+  /* 확대된 이미지가 들어가는 무대 (문지르기 캔버스) */
+  #rubStage {
+    position: relative;
+    transform: scale(0.92);
+    transition: transform 0.45s cubic-bezier(.2,.8,.2,1);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.12);
+  }
+  #overlay.show #rubStage { transform: scale(1); }
+  #rubStage canvas,
+  #rubStage img { display: block; }
+
+  /* ── 확대 이미지 하단 캡션 (sfaubert.info 톤: 작은 모노스페이스) ──
+     이미지(rubStage)와 같은 너비. 왼쪽=설명, 오른쪽=Drag to rub 버튼 */
+  #caption {
+    position: relative;
+    margin-top: 12px;
+    width: 0;                   /* JS 에서 이미지 너비에 맞춰 설정 */
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    font-family: 'TGFrekuentMono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+    font-weight: 300;
+    font-size: 10px;
+    line-height: 1.5;
+    letter-spacing: 0.02em;
+    color: rgba(0,0,0,0.78);
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.5s ease 0.15s, transform 0.5s ease 0.15s;
+    pointer-events: none;
+  }
+  #caption .cap-text {
+    text-align: left;
+    white-space: pre-line;      /* 줄바꿈(\n) 그대로 살림 */
+    flex: 1 1 auto;
+  }
+  /* 오른쪽 끝 'Drag to rub' — 밑줄, 클릭 가능 */
+  #caption .rub-btn {
+    flex: 0 0 auto;
+    text-align: right;
+    white-space: nowrap;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    pointer-events: auto;       /* 이 요소만 클릭 받음 */
+    color: rgba(0,0,0,0.78);
+  }
+  #caption .rub-btn:hover { color: #111; }
+  #caption.no-rub {
+    justify-content: flex-start;
+  }
+  #caption.no-rub .rub-btn {
+    display: none;
+  }
+  #overlay.show #caption { opacity: 1; transform: translateY(0); }
+  /* 포스터(Exhibition) 클릭 상세에서는 캡션 텍스트 화이트 */
+  body.exhibition-detail-open #caption,
+  body.exhibition-detail-open #caption .cap-text { color: #FFFFFF; }
+
+  /* mouse.png 커스텀 커서 — 'Drag to rub' 활성화 후에만 시스템 커서 숨김 */
+  body.rub-active #overlay.show,
+  body.rub-active #overlay.show * { cursor: none; }
+  #caption .rub-btn { cursor: pointer; }   /* 버튼은 항상 포인터 */
+  #rubCursor {
+    position: fixed; top: 0; left: 0; z-index: 90;
+    width: 150px; height: 150px;
+    pointer-events: none; opacity: 0;
+    transform: translate(-50%, -50%);
+    transition: opacity 0.2s ease;
+    background-size: contain; background-repeat: no-repeat; background-position: center;
+  }
+  #rubCursor.show { opacity: 1; }
+
+  #exhibitionScreen {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    background: #141414;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    cursor: default;
+    transition: opacity 0.45s ease, visibility 0s linear 0.45s, filter 0.45s ease;
+  }
+  #exhibitionScreen.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
+  }
+  #exhibitionCanvas {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow: hidden;
+  }
+  #exhibitionCanvas canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  #exhibitionHint {
+    position: absolute;
+    left: 50%;
+    top: 52%;
+    z-index: 0;
+    transform: translate(-50%, -50%);
+    font-family: 'JamGrotesque', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: clamp(30px, 8.4vw, 132px);
+    line-height: 0.9;
+    letter-spacing: 0;
+    color: #FFFFFF;
+    white-space: nowrap;
+    user-select: none;
+    pointer-events: none;
+    display: none;
+  }
+  #exhibitionBack {
+    position: fixed;
+    top: 34px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+    appearance: none;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font-family: 'JamGrotesque', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    line-height: 1.2;
+    letter-spacing: 0.005em;
+    color: #FFFFFF;
+    cursor: pointer;
+  }
+  #exhibitionBack:hover { color: rgba(255,255,255,0.6); }
+  #exhibitionBack .arrow { display: inline-block; margin-left: 0.18em; }
+  #exhibitionInfo {
+    position: fixed;
+    top: 34px;
+    left: 34px;
+    z-index: 2;
+    max-width: 360px;
+    pointer-events: none;
+    user-select: none;
+  }
+  #exhibitionInfo .title {
+    font-family: 'JamGrotesque', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    line-height: 1.2;
+    letter-spacing: 0.005em;
+    color: #FFFFFF;
+    margin-bottom: 14px;
+  }
+  #exhibitionInfo .desc {
+    font-family: 'TGFrekuentMono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+    font-weight: 300;
+    font-size: 10px;
+    line-height: 1.55;
+    letter-spacing: 0.01em;
+    color: #FFFFFF;
+    white-space: pre-line;
+  }
+  body.exhibition-open #scene,
+  body.exhibition-open #topNav,
+  body.exhibition-open #info,
+  body.exhibition-open #updated,
+  body.exhibition-open #cats,
+  body.exhibition-open #zoom {
+    opacity: 0;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="scene"></div>
+
+<nav id="topNav" aria-label="Main">
+  <button id="exhibitionLink" type="button">Metadata Poster Archive<span class="arrow" aria-hidden="true">&#8599;</span></button>
+</nav>
+
+<!-- 왼쪽 위 고정 텍스트 (제목 + 설명) -->
+<div id="info">
+  <div class="title">Surface Metadata Visualization</div>
+  <div class="desc">Rubbing Metadata Visualization is a project about the translation of surfaces across media. It begins with physical rubbing, records each surface through metadata, and transforms the information into visual systems.
+
+Rather than seeing rubbing as a simple copy of texture, the project treats it as a record of contact: time, place, pressure, direction, paper, tool, and sensation. These records move from surface to image, from image to data, and from data into interactive web pages and printed posters.</div>
+</div>
+
+<!-- 왼쪽 아래 고정 Last updated (임의 랜덤 날짜/시간 — 나중에 이미지별 collection date 로 교체) -->
+<div id="updated">
+  <span class="label">Collection Date</span>:<br>
+  <span id="updatedValue"></span>
+</div>
+
+<!-- 오른쪽 세로 카테고리 라벨 -->
+<div id="cats">
+  <div data-cat="stone">[Stone]</div>
+  <div data-cat="brick">[Brick]</div>
+  <div data-cat="cut_flower">[Cut Flower]</div>
+  <div data-cat="speed_bump">[Speed Bump]</div>
+  <div data-cat="gate">[Gate]</div>
+  <div data-cat="asphalt">[Asphalt]</div>
+  <div data-cat="wood">[Wood]</div>
+  <div data-cat="metal_object">[Metal Object]</div>
+  <div data-cat="soil">[Soil]</div>
+</div>
+
+<!-- 나선 확대/축소 버튼 (텍스트 위 레이어) -->
+<div id="zoom">
+  <button id="zoomIn" aria-label="zoom in">+</button>
+  <button id="zoomOut" aria-label="zoom out">−</button>
+</div>
+
+<div id="loader">
+  <div class="load-bar"><i id="loadFill"></i></div>
+</div>
+
+<!-- 이미지 확대 + 문지르기 오버레이 -->
+<div id="overlay">
+  <div id="rubStage"></div>
+  <div id="caption">
+    <span class="cap-text"></span>
+    <span class="rub-btn">Drag to rub</span>
+  </div>
+</div>
+<div id="rubCursor"></div>
+
+<section id="exhibitionScreen" aria-hidden="true">
+  <div id="exhibitionHint" aria-hidden="true">Move your cursor</div>
+  <div id="exhibitionCanvas"></div>
+  <button id="exhibitionBack" type="button">Back<span class="arrow" aria-hidden="true">&#8599;</span></button>
+  <div id="exhibitionInfo">
+    <div class="title">Metadata Poster Archive</div>
+    <div class="desc">This page presents a series of posters generated from rubbing metadata. The original rubbing images are layered with ASCII textures created from spreadsheet-based records, turning collected information into visual surface.
+
+Each poster combines two metadata fields at a time, translating pressure, time, surface material, friction direction, and condition into different graphic systems. Through this process, each rubbing is read not only as an image, but as a record of contact.</div>
+  </div>
+</section>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ════════════════════════════════════════════════════════════
+   설정값
+   ════════════════════════════════════════════════════════════ */
+const IMAGE_COUNT = 30;
+const IMAGE_PATH  = (i) => `assets/${i}.jpg`;   // assets/1.jpg ~ 30.jpg
+const RUB_PATH    = (i) => `assets/${i}-${i}.jpg`; // 탁본본: assets/1-1.jpg ...
+const CURSOR_PATH = 'assets/mouse.png';         // 문지르기 커서 이미지
+const RUB_ENABLED = new Set(Array.from({length: IMAGE_COUNT}, (_, i) => i + 1)); // 전체 1~30 적용
+const RUB_RADIUS  = 46;                         // 문지르는 브러시 반경(px)
+
+/* ── 이미지별 캡션 텍스트 ──────────────────────────────────────
+   key = 이미지 번호(1~30). 나중에 각 이미지에 맞는 텍스트로 교체하면 됨.
+   CAPTIONS 에 해당 번호가 없으면 DEFAULT_CAPTION 을 사용.
+   줄바꿈은 \n 으로 표현 (CSS white-space: pre-line 으로 그대로 표시됨).
+   ──────────────────────────────────────────────────────────── */
+const DEFAULT_CAPTION =
+`Near Woljeongro 20gil, Seoul.
+Late afternoon, old gate surface.
+Rusted padlock with worn edges.
+Octavo paper, approx. 272 × 394mm`;
+
+const CAPTIONS = {
+  1: DEFAULT_CAPTION,
+  2: `Beside a narrow alley wall, Seoul.
+Dry daylight, rough wall dust.
+Dried climbing plant and leaf veins.
+Octavo paper, approx. 272 × 394mm`,
+  3: `Under a residential stairway, Seoul.
+Blue gray light, cold metal surface.
+Chipped railing with rust spots.
+Octavo paper, approx. 272 × 394mm`,
+  4: `Near the roadside of Woljeongro, Seoul.
+Morning light, concrete utility pole.
+Cracked warning sticker and dust.
+Octavo paper, approx. 272 × 394mm`,
+  5: `At the edge of a parking space, Seoul.
+Pale daylight, brick wall surface.
+Weathered brick and cement lines.
+Octavo paper, approx. 272 × 394mm`,
+  6: `Beside an apartment entrance, Seoul.
+Warm daylight, shared entrance wall.
+Scratched mailbox plate and slot.
+Octavo paper, approx. 272 × 394mm`,
+  7: `Near a small drain cover, Seoul.
+Early afternoon, roadside ground.
+Parallel metal grate and dark gaps.
+Octavo paper, approx. 272 × 394mm`,
+  8: `On a low stone wall, Seoul.
+Fading light, alley-side surface.
+Fallen leaves and rough stone texture.
+Octavo paper, approx. 272 × 394mm`,
+  9: `Beside a narrow green gate, Seoul.
+Cloudy daylight, old metal entrance.
+Peeling paint and rusted edge.
+Octavo paper, approx. 272 × 394mm`,
+  10: `Near a utility pole, Seoul.
+Clear morning, public street surface.
+Concrete grains and torn sticker traces.
+Octavo paper, approx. 272 × 394mm`,
+  11: `Outside a residential building, Seoul.
+Afternoon light, utility box surface.
+Embossed gas meter cover.
+Octavo paper, approx. 272 × 394mm`,
+  12: `At the corner of a side road, Seoul.
+Flat daylight, cracked ground.
+Rough asphalt and small stones.
+Octavo paper, approx. 272 × 394mm`,
+  13: `Near a closed shop shutter, Seoul.
+Evening light, corrugated metal.
+Shutter lines and surface scratches.
+Octavo paper, approx. 272 × 394mm`,
+  14: `Below a street sign pole, Seoul.
+White daylight, taped metal surface.
+Layered tape residue and dust.
+Octavo paper, approx. 272 × 394mm`,
+  15: `Beside a garden fence, Seoul.
+Soft daylight, thin plant surface.
+Dry vine stem and bent leaf veins.
+Octavo paper, approx. 272 × 394mm`,
+  16: `Near an alley doorbell, Seoul.
+Noon light, entrance panel.
+Plastic button and scratched plate.
+Octavo paper, approx. 272 × 394mm`,
+  17: `On a cracked cement step, Seoul.
+Morning light, stair edge.
+Worn cement and powdery dust.
+Octavo paper, approx. 272 × 394mm`,
+  18: `Beside a blue water pipe, Seoul.
+Cool daylight, painted pipe surface.
+Rust spots and chipped paint.
+Octavo paper, approx. 272 × 394mm`,
+  19: `Near a roadside planter, Seoul.
+Warm daylight, plastic rim.
+Dry soil and leaf fragments.
+Octavo paper, approx. 272 × 394mm`,
+  20: `At a wall corner, Seoul.
+Late morning, tiled surface.
+Broken grout and old tile marks.
+Octavo paper, approx. 272 × 394mm`,
+  21: `Near a bicycle parking rail, Seoul.
+Afternoon light, curved metal.
+Hand-worn rail and scratches.
+Octavo paper, approx. 272 × 394mm`,
+  22: `Under a small window frame, Seoul.
+Dim daylight, dusty sill edge.
+Chipped paint and settled dust.
+Octavo paper, approx. 272 × 394mm`,
+  23: `Beside a public notice board, Seoul.
+Bright daylight, papered surface.
+Staple marks and fiber residue.
+Octavo paper, approx. 272 × 394mm`,
+  24: `Near a narrow alley drain, Seoul.
+Cloudy light, concrete edge.
+Wet stain trace and rough surface.
+Octavo paper, approx. 272 × 394mm`,
+  25: `On an old wooden door, Seoul.
+Soft evening light, worn wood.
+Wood grain and peeling varnish.
+Octavo paper, approx. 272 × 394mm`,
+  26: `Beside a metal fence corner, Seoul.
+Clear daylight, wire grid.
+Bent joints and rusted marks.
+Octavo paper, approx. 272 × 394mm`,
+  27: `Near the base of a street tree, Seoul.
+Late afternoon, bark surface.
+Dry root marks and rough texture.
+Octavo paper, approx. 272 × 394mm`,
+  28: `On a residential wall pipe, Seoul.
+Pale daylight, pipe fixture.
+Clamp ring and screw head.
+Octavo paper, approx. 272 × 394mm`,
+  29: `Near a concrete flower bed, Seoul.
+Morning light, broken edge.
+Scattered soil and cement cracks.
+Octavo paper, approx. 272 × 394mm`,
+  30: `At the end of Woljeongro 20gil, Seoul.
+Fading daylight, mixed alley surface.
+Dust, scratches, and small traces.
+Octavo paper, approx. 272 × 394mm`,
+};
+function captionFor(idx) {
+  return CAPTIONS[idx] || DEFAULT_CAPTION;
+}
+
+const TURNS        = 4.5;     // 위→아래 총 회전수 (조금 더 촘촘하게)
+const SPHERE_R     = 21;      // 구(경위선) 반지름
+const HELIX_OUTER  = 15;      // 위쪽 바깥 나선 반지름 (구에 가까운 큰 나선)
+const HELIX_INNER  = 7;       // 아래쪽 안쪽 나선 반지름 (작은 나선)
+const MID_BULGE    = 1.05;    // 중간(적도) 부풀림 정도 (1.0이면 부풀림 없음)
+const POLE_GAP     = 0.0;     // 극점 여백 (0이면 구의 정확한 위/아래 끝에서 시작·끝)
+const CARD_W = 5.0;
+const CARD_H = 3.1;
+
+// 카드가 배치되는 t 범위 (양 극점 살짝 안쪽)
+const CARD_T_START = 0.05;
+const CARD_T_END   = 0.95;
+
+/* ════════════════════════════════════════════════════════════
+   씬 / 렌더러 / 카메라
+   ════════════════════════════════════════════════════════════ */
+const container = document.getElementById('scene');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+
+const camera = new THREE.PerspectiveCamera(
+  55, window.innerWidth / window.innerHeight, 0.1, 400
+);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+container.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+/* ════════════════════════════════════════════════════════════
+   나선 경로 함수 — 하나의 연속된 나선 (스크롤에 따라 동적으로 변형)
+   ── turns/bulge 를 인자로 받아 실시간으로 감김 정도·부풀림이 변함
+   ════════════════════════════════════════════════════════════ */
+function helixPoint(t, turns = TURNS, bulge = MID_BULGE) {
+  const tt = POLE_GAP + t * (1 - 2 * POLE_GAP);
+  // 높이: 위(+R) → 아래(−R)  + 약간의 비정형 흔들림
+  let y = (1 - 2 * tt) * SPHERE_R;
+
+  // 바깥(큰)→안쪽(작은) 반지름으로 전환: 위쪽은 OUTER, 아래쪽은 INNER
+  const blend = smoothstep(0.35, 0.65, tt);
+  let bandR = HELIX_OUTER * (1 - blend) + HELIX_INNER * blend;
+
+  // 중간(적도)에서 살짝 부풀리기
+  const bulgeF = 1 + (bulge - 1) * Math.sin(tt * Math.PI);
+  bandR *= bulgeF;
+
+  // ── 비정형 변형 (여러 주기의 사인파를 겹쳐 손으로 그린 듯한 불규칙함) ──
+  // 극점(taper=0)에서는 흔들림도 0이 되도록 taper 를 곱함
+  const taper = Math.sin(tt * Math.PI);
+  const wob =
+      Math.sin(tt * 6.3 + 0.7) * 0.10 +
+      Math.sin(tt * 11.1 + 2.1) * 0.055 +
+      Math.sin(tt * 17.7 + 4.4) * 0.03;
+  const radiusWobble = 1 + wob;                 // 반지름이 구간마다 들쭉날쭉
+  const angleWobble  =
+      Math.sin(tt * 5.0 + 1.3) * 0.18 +
+      Math.sin(tt * 9.4 + 3.0) * 0.09;          // 감기는 각도도 살짝 흔들림
+  const yWobble = (Math.sin(tt * 7.2 + 2.6) * 0.05 +
+                   Math.sin(tt * 13.0 + 0.4) * 0.025) * SPHERE_R * taper;
+
+  const ringR = bandR * taper * radiusWobble;
+  y += yWobble;
+
+  const angle = tt * turns * Math.PI * 2 + angleWobble;
+  return {
+    x: Math.cos(angle) * ringR,
+    y,
+    z: Math.sin(angle) * ringR,
+    angle, radius: ringR,
+  };
+}
+function smoothstep(a, b, x) {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
+
+/* ════════════════════════════════════════════════════════════
+   원형 도트 텍스처
+   ════════════════════════════════════════════════════════════ */
+function makeDotTexture() {
+  const s = 128;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  ctx.beginPath();
+  ctx.arc(s/2, s/2, s/2 - 10, 0, Math.PI * 2);
+  ctx.fillStyle = '#111111';
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+const DOT_TEX = makeDotTexture();
+
+/* ════════════════════════════════════════════════════════════
+   촘촘한 원형 도트 점선 가이드
+   ════════════════════════════════════════════════════════════ */
+function dottedFromPoints(points, baseSize, opacity, shrinkFront, sizeScales = null) {
+  const geo = new THREE.BufferGeometry().setFromPoints(points);
+  const n = points.length || 0;
+  const fades = new Float32Array(n).fill(1.0);
+  const scales = new Float32Array(n).fill(1.0);
+  if (sizeScales) {
+    for (let i = 0; i < n; i++) {
+      scales[i] = sizeScales[i] == null ? 1.0 : sizeScales[i];
+    }
+  }
+  geo.setAttribute('aFade', new THREE.BufferAttribute(fades, 1));
+  geo.setAttribute('aSizeScale', new THREE.BufferAttribute(scales, 1));
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uMap:      { value: DOT_TEX },
+      uSize:     { value: baseSize },
+      uOpacity:  { value: opacity },
+      uShrink:   { value: shrinkFront ? 1.0 : 0.0 },
+    },
+    transparent: true,
+    depthWrite: false,
+    vertexShader: /* glsl */`
+      uniform float uSize;
+      uniform float uShrink;
+      attribute float aFade;
+      attribute float aSizeScale;
+      varying float vFade;
+      void main() {
+        vFade = aFade;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        float dist = max(length(mv.xyz), 1.0);
+        float persp = uSize * (300.0 / dist);
+        float shrink = mix(1.0, clamp(dist / 28.0, 0.45, 1.0), uShrink);
+        gl_PointSize = max(persp * shrink * clamp(aSizeScale, 0.12, 3.4), 1.0);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */`
+      uniform sampler2D uMap;
+      uniform float uOpacity;
+      varying float vFade;
+      void main() {
+        vec4 tex = texture2D(uMap, gl_PointCoord);
+        if (tex.a < 0.3) discard;
+        gl_FragColor = vec4(vec3(0.18), tex.a * uOpacity * vFade);
+      }
+    `,
+  });
+
+  const pts = new THREE.Points(geo, mat);
+  pts.frustumCulled = false;
+  return pts;
+}
+
+function sampleHelix(strand, spacing) {
+  const dense = [];
+  const N = 3000;
+  for (let s = 0; s <= N; s++) {
+    const p = helixPoint(s / N);
+    dense.push(new THREE.Vector3(p.x, p.y, p.z));
+  }
+  const out = [];
+  let acc = 0;
+  out.push(dense[0].clone());
+  for (let i = 1; i < dense.length; i++) {
+    acc += dense[i].distanceTo(dense[i - 1]);
+    if (acc >= spacing) { out.push(dense[i].clone()); acc = 0; }
+  }
+  return out;
+}
+
+const HELIX_DOTS = 2400;
+const helixGeo = new THREE.BufferGeometry();
+const helixPos = new Float32Array(HELIX_DOTS * 3);
+const helixFade = new Float32Array(HELIX_DOTS).fill(1.0);
+const helixSize = new Float32Array(HELIX_DOTS).fill(1.0);
+helixGeo.setAttribute('position', new THREE.BufferAttribute(helixPos, 3));
+helixGeo.setAttribute('aFade', new THREE.BufferAttribute(helixFade, 1));
+helixGeo.setAttribute('aSizeScale', new THREE.BufferAttribute(helixSize, 1));
+const helixLine = dottedFromPoints([], 0.2, 0.75, false);
+helixLine.geometry = helixGeo;
+scene.add(helixLine);
+
+function updateHelixLine(turns, bulge) {
+  for (let i = 0; i < HELIX_DOTS; i++) {
+    const t = i / (HELIX_DOTS - 1);
+    const p = helixPoint(t, turns, bulge);
+    helixPos[i*3]   = p.x;
+    helixPos[i*3+1] = p.y;
+    helixPos[i*3+2] = p.z;
+    const edge = Math.min(t, 1 - t) / 0.18;
+    helixFade[i] = THREE.MathUtils.clamp(edge, 0, 1);
+    helixSize[i] = THREE.MathUtils.lerp(1.32, 0.7, t);
+  }
+  helixGeo.attributes.position.needsUpdate = true;
+  helixGeo.attributes.aFade.needsUpdate = true;
+  helixGeo.attributes.aSizeScale.needsUpdate = true;
+}
+
+function sampleCircle(buildFn, spacing) {
+  const dense = [];
+  const N = 1200;
+  for (let s = 0; s <= N; s++) dense.push(buildFn(s / N));
+  const out = []; let acc = 0; out.push(dense[0].clone());
+  for (let i = 1; i < dense.length; i++) {
+    acc += dense[i].distanceTo(dense[i - 1]);
+    if (acc >= spacing) { out.push(dense[i].clone()); acc = 0; }
+  }
+  return out;
+}
+
+function buildSphereWire() {
+  const group = new THREE.Group();
+  const R = SPHERE_R;
+
+  const MERIDIANS = 4;
+  for (let m = 0; m < MERIDIANS; m++) {
+    const rot = (m / MERIDIANS) * Math.PI;
+    const pts = sampleCircle((u) => {
+      const a = u * Math.PI * 2;
+      const x0 = Math.cos(a) * R, y0 = Math.sin(a) * R;
+      return new THREE.Vector3(x0 * Math.cos(rot), y0, x0 * Math.sin(rot));
+    }, 0.14);
+    group.add(dottedFromPoints(pts, 0.3, 0.6, false));
+  }
+
+  const PARALLELS = 3;
+  for (let p = 1; p <= PARALLELS; p++) {
+    const frac = p / (PARALLELS + 1);
+    const phi = (frac - 0.5) * Math.PI;
+    const ringR = Math.cos(phi) * R;
+    const yy = Math.sin(phi) * R;
+    const pts = sampleCircle((u) => {
+      const a = u * Math.PI * 2;
+      return new THREE.Vector3(Math.cos(a) * ringR, yy, Math.sin(a) * ringR);
+    }, 0.14);
+    group.add(dottedFromPoints(pts, 0.3, 0.6, false));
+  }
+  return group;
+}
+scene.add(buildSphereWire());
+
+/* ════════════════════════════════════════════════════════════
+   카드 생성
+   ════════════════════════════════════════════════════════════ */
+const loader = new THREE.TextureLoader();
+const cards = [];
+let loadedCount = 0;
+const loadFill = document.getElementById('loadFill');
+
+for (let i = 0; i < IMAGE_COUNT; i++) {
+  const baseT = (i + 0.5) / IMAGE_COUNT;
+
+  const geo = new THREE.PlaneGeometry(CARD_W, CARD_H);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffffff, transparent: true, side: THREE.DoubleSide, opacity: 1,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData.imgIndex = i + 1;
+
+  scene.add(mesh);
+
+  cards.push({
+    mesh, mat,
+    baseT,
+    fAmp:  0.25 + Math.random() * 0.5,
+    fSpd:  0.25 + Math.random() * 0.5,
+    fPhase: Math.random() * Math.PI * 2,
+    fPhase2: Math.random() * Math.PI * 2,
+    tiltYaw:   (Math.random() - 0.5) * 0.5,
+    tiltPitch: (Math.random() - 0.5) * 0.45,
+    tiltRoll:  (Math.random() - 0.5) * 0.35,
+    swayAmp: 0.03 + Math.random() * 0.05,
+    hoverMul: 1,                 // 카테고리 호버 시 곱해지는 opacity 배율 (1=정상)
+  });
+
+  loader.load(
+    IMAGE_PATH(i + 1),
+    (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      mat.map = tex; mat.needsUpdate = true;
+      const img = tex.image;
+      if (img && img.width && img.height) {
+        const ar = img.width / img.height;
+        const targetAr = CARD_W / CARD_H;
+        if (ar > targetAr) mesh.scale.y = targetAr / ar;
+        else mesh.scale.x = ar / targetAr;
+      }
+      onLoad();
+    },
+    undefined,
+    () => onLoad()
+  );
+}
+
+function onLoad() {
+  loadedCount++;
+  loadFill.style.width = (loadedCount / IMAGE_COUNT * 100) + '%';
+  if (loadedCount >= IMAGE_COUNT) {
+    setTimeout(() => document.getElementById('loader').classList.add('hidden'), 350);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   Exhibition 화면 — 15개의 포스터가 안쪽으로 말려 들어가는 구도
+   ════════════════════════════════════════════════════════════ */
+const EXHIBITION_COUNT = 11;
+const EXHIBITION_POSTER_PATH = (i) => `assets/poster${i}-exhibition.jpg`;
+const EXHIBITION_DEFAULT_CAPTION =
+`Surface Metadata Visualization.
+Exhibition poster.`;
+const EXHIBITION_CAPTIONS = {
+  1: `Pressure × Rubbing Duration
+A visualization poster generated from rubbing metadata.
+Contact strength and time become density and rhythm.`,
+  2: `Surface Material × Friction Direction
+A visualization poster generated from rubbing metadata.
+Material and movement become grain, line, and flow.`,
+  3: `Collection Time × Surface Condition
+A visualization poster generated from rubbing metadata.
+Light, dryness, and damage become contrast and texture.`,
+  4: `Location × Surface Object
+A visualization poster generated from rubbing metadata.
+Surfaces connect to place, object, and urban trace.`,
+  5: `Surface Texture × Rubbing Sensation
+A visualization poster generated from rubbing metadata.
+Roughness and resistance become visual texture.`,
+  6: `First Impression × After Impression
+A visualization poster generated from rubbing metadata.
+Expected surface and remaining trace shift visually.`,
+  7: `Surface Object × Pressure
+A visualization poster generated from rubbing metadata.
+Objects and force become density and visual weight.`,
+  8: `Friction Direction × Rubbing Duration
+A visualization poster generated from rubbing metadata.
+Direction and time become movement and repetition.`,
+  9: `Surface Condition × Pressure
+A visualization poster generated from rubbing metadata.
+Resistance and force become visual intensity.`,
+  10: `Paper Type × Surface Material
+A visualization poster generated from rubbing metadata.
+Paper meeting surface becomes grain and texture.`,
+  11: `Date × Rubbing Duration
+A visualization poster generated from rubbing metadata.
+Collection days and time become a visual record.`,
+};
+function exhibitionCaptionFor(idx) {
+  return EXHIBITION_CAPTIONS[idx] || EXHIBITION_DEFAULT_CAPTION;
+}
+const exhibitionMount = document.getElementById('exhibitionCanvas');
+const exhibitionScene = new THREE.Scene();
+exhibitionScene.background = null;
+
+const exhibitionCamera = new THREE.PerspectiveCamera(
+  60, window.innerWidth / window.innerHeight, 0.1, 2000
+);
+
+const exhibitionRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+exhibitionRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+exhibitionRenderer.setSize(window.innerWidth, window.innerHeight);
+exhibitionRenderer.outputColorSpace = THREE.SRGBColorSpace;
+exhibitionRenderer.setClearColor(0xffffff, 0);
+if (exhibitionMount) exhibitionMount.appendChild(exhibitionRenderer.domElement);
+
+exhibitionScene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+/* 포스터는 그룹 안에서 '고정된 강체'로 나선 벽에 배치한다.
+   스크롤하면 포스터를 각각 돌리는 게 아니라, 그룹 전체를
+   나사 운동(축 기준 회전 + 축 방향 전진)시켜서 카메라가 종이 터널을
+   따라 들어가는 것처럼 보이게 한다. (= 카메라 시선이 같이 도는 느낌)
+   카메라 뒤로 지나간 포스터는 가장 안쪽 끝으로 재활용 → 끝없는 스크롤. */
+const exhibitionGroup = new THREE.Group();
+exhibitionScene.add(exhibitionGroup);
+
+const exhibitionPosterGeo = new THREE.PlaneGeometry(7.2, 10.2);
+const exhibitionPosters = [];
+
+let exhibitionLayout = {
+  axis: new THREE.Vector3(0, 0.14, -1).normalize(), // 터널이 들어가는 방향
+  U: new THREE.Vector3(1, 0, 0),  // 단면 가로 기저 (런타임 계산)
+  V: new THREE.Vector3(0, 1, 0),  // 단면 세로 기저 (런타임 계산)
+  radius: 16,        // 터널 반지름
+  thetaStep: 0.70,   // 포스터 한 장당 감기는 각도(rad)
+  depthStep: 7.4,    // 포스터 한 장당 안쪽으로 들어가는 깊이
+  panelScale: 2.0,   // 포스터 크기
+  phase0: -1.10,     // 맨 앞 포스터가 놓이는 각도(아래쪽에 큰 포스터)
+  camBack: 11.5,     // 카메라가 입구 뒤로 물러난 거리
+  camV: -10,         // 카메라 수직 오프셋(음수=아래로)
+  lookDepth: 30,     // 시선이 향하는 터널 안쪽 깊이
+  lookV: 4,          // 시선 수직 보정(소실점 높이)
+  nearFadeEnd: -1.4, // 카메라 뒤로 완전히 사라지는 지점
+  nearFadeStart: -0.2,
+  farFadeStart: 6.6, // 이 깊이부터 안개로 흐려지기 시작
+  farFadeEnd: 8.9,   // 완전히 사라지는 깊이(여기서 재활용)
+};
+
+(function initExhibitionBasis() {
+  const L = exhibitionLayout;
+  const up = Math.abs(L.axis.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  L.U.copy(up).cross(L.axis).normalize();
+  L.V.copy(L.axis).cross(L.U).normalize();
+})();
+
+let exhibitionProgress = 0;        // 현재 전진량(포스터 단위)
+let exhibitionProgressTarget = 0;  // 목표 전진량
+let exhibitionTouchY = 0;
+let exhibitionHoverIndex = -1;
+let exhibitionPressActive = false;
+let exhibitionPressStartX = 0;
+let exhibitionPressStartY = 0;
+let exhibitionPressLastX = 0;
+let exhibitionPressLastY = 0;
+let exhibitionPressMoved = 0;
+
+const exhibitionRaycaster = new THREE.Raycaster();
+const exhibitionPointer = new THREE.Vector2(10, 10);
+const _radial = new THREE.Vector3();
+const _tangent = new THREE.Vector3();
+const _normal = new THREE.Vector3();
+const _basisX = new THREE.Vector3();
+const _basisY = new THREE.Vector3();
+const _mat4 = new THREE.Matrix4();
+const _screwQuat = new THREE.Quaternion();
+const _look = new THREE.Vector3();
+
+function exhibitionRadial(theta, out) {
+  return out
+    .copy(exhibitionLayout.U).multiplyScalar(Math.cos(theta))
+    .addScaledVector(exhibitionLayout.V, Math.sin(theta));
+}
+
+// 포스터를 그룹 안 '로컬' 좌표에 고정 배치 (slot = 유효 슬롯, 재활용 시 ±N)
+function placePoster(poster) {
+  const L = exhibitionLayout;
+  const e = poster.slot;
+  const theta = L.phase0 + e * L.thetaStep;
+  const depth = e * L.depthStep;
+  exhibitionRadial(theta, _radial);
+
+  poster.group.position
+    .copy(L.axis).multiplyScalar(depth)
+    .addScaledVector(_radial, L.radius);
+
+  // 앞면이 터널 안쪽(축)을 향하도록: 가로=접선, 세로=축, 법선=안쪽
+  _tangent.copy(L.U).multiplyScalar(-Math.sin(theta))
+          .addScaledVector(L.V, Math.cos(theta)).normalize();
+  _normal.copy(_radial).multiplyScalar(-1).normalize();
+  _basisX.copy(_tangent);
+  _basisY.copy(L.axis);
+  _mat4.makeBasis(_basisX, _basisY, _normal);
+  poster.group.quaternion.setFromRotationMatrix(_mat4);
+}
+
+function makePlaceholderTexture(n) {
+  const cv = document.createElement('canvas');
+  cv.width = 360; cv.height = 510;
+  const c = cv.getContext('2d');
+  const hue = (n * 47) % 360;
+  c.fillStyle = `hsl(${hue}, 16%, 93%)`;
+  c.fillRect(0, 0, cv.width, cv.height);
+  c.strokeStyle = `hsl(${hue}, 32%, 52%)`;
+  c.lineWidth = 8; c.strokeRect(12, 12, cv.width - 24, cv.height - 24);
+  c.fillStyle = `hsl(${hue}, 45%, 32%)`;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.font = '700 150px JamGrotesque, system-ui, sans-serif';
+  c.fillText(String(n), cv.width / 2, cv.height / 2 - 10);
+  c.font = '300 28px TGFrekuentMono, monospace';
+  c.fillText('POSTER', cv.width / 2, cv.height / 2 + 120);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function loadExhibitionTexture(poster, i) {
+  loader.load(
+    EXHIBITION_POSTER_PATH(i + 1),
+    (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      poster.frontMat.map = tex;
+      poster.frontMat.color.setHex(0xffffff);
+      poster.frontMat.needsUpdate = true;
+    },
+    undefined,
+    () => {
+      poster.frontMat.map = makePlaceholderTexture(i + 1);
+      poster.frontMat.color.setHex(0xffffff);
+      poster.frontMat.needsUpdate = true;
+    }
+  );
+}
+
+for (let i = 0; i < EXHIBITION_COUNT; i++) {
+  // depthWrite:true → 포스터가 실제 깊이를 기록해서 점선 도트와 진짜 3D로 가려짐/관통됨
+  const frontMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff, side: THREE.FrontSide, transparent: true, depthWrite: true,
+  });
+  const backMat = new THREE.MeshBasicMaterial({
+    color: 0xdedede, side: THREE.BackSide, transparent: true, depthWrite: true,
+  });
+  const group = new THREE.Group();
+  const front = new THREE.Mesh(exhibitionPosterGeo, frontMat);
+  const back = new THREE.Mesh(exhibitionPosterGeo, backMat);
+  group.add(front, back);
+  group.scale.setScalar(exhibitionLayout.panelScale);
+  exhibitionGroup.add(group);
+
+  const poster = { group, front, back, frontMat, backMat, index: i, slot: i, hover: 0 };
+  exhibitionPosters.push(poster);
+  placePoster(poster);
+  loadExhibitionTexture(poster, i);
+}
+
+function smooth01(a, b, x) {
+  return THREE.MathUtils.smoothstep(x, Math.min(a, b), Math.max(a, b));
+}
+
+function resetExhibitionMotion() {
+  exhibitionProgress = 0;
+  exhibitionProgressTarget = 0;
+  exhibitionHoverIndex = -1;
+  exhibitionPosters.forEach((p, i) => { p.hover = 0; p.slot = i; placePoster(p); });
+  updateExhibitionCamera();
+  updateExhibitionPosters();
+  exhibitionRenderer.render(exhibitionScene, exhibitionCamera);
+}
+
+function handleExhibitionScroll(deltaY) {
+  if (!exhibitionOpen || Math.abs(deltaY) < 2) return;
+  exhibitionProgressTarget += deltaY * 0.0065;     // 앞/뒤 모두 스크롤, 끝없이
+  if (exhibitionProgressTarget < 0) exhibitionProgressTarget = 0;
+}
+
+function exhibitionPosterHit(clientX, clientY) {
+  if (!exhibitionOpen || overlayOpen) return null;
+  const rect = exhibitionRenderer.domElement.getBoundingClientRect();
+  exhibitionPointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  exhibitionPointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  exhibitionRaycaster.setFromCamera(exhibitionPointer, exhibitionCamera);
+  const hits = exhibitionRaycaster.intersectObjects(
+    exhibitionPosters.flatMap(p => [p.front, p.back]), false
+  );
+  if (!hits.length) return null;
+  return exhibitionPosters.find(p => p.front === hits[0].object || p.back === hits[0].object) || null;
+}
+
+function updateExhibitionHover(e) {
+  if (!exhibitionOpen) return;
+  const hit = exhibitionPosterHit(e.clientX, e.clientY);
+  exhibitionHoverIndex = hit ? hit.index : -1;
+}
+
+function clearExhibitionHover() { exhibitionHoverIndex = -1; }
+
+function startExhibitionPress(x, y) {
+  if (!exhibitionOpen || overlayOpen) return;
+  exhibitionPressActive = true;
+  exhibitionPressStartX = x;
+  exhibitionPressStartY = y;
+  exhibitionPressLastX = x;
+  exhibitionPressLastY = y;
+  exhibitionPressMoved = 0;
+}
+
+function moveExhibitionPress(x, y) {
+  if (!exhibitionPressActive) return;
+  exhibitionPressMoved += Math.abs(x - exhibitionPressLastX) + Math.abs(y - exhibitionPressLastY);
+  exhibitionPressLastX = x;
+  exhibitionPressLastY = y;
+}
+
+function endExhibitionPress(x, y) {
+  if (!exhibitionPressActive) return;
+  exhibitionPressActive = false;
+  if (!exhibitionOpen || overlayOpen) return;
+  const travel = Math.hypot(x - exhibitionPressStartX, y - exhibitionPressStartY);
+  if (travel > 8 || exhibitionPressMoved > 12) return;
+  const hit = exhibitionPosterHit(x, y);
+  if (hit) openExhibitionPoster(hit.index + 1);
+}
+
+/* ── 포스터를 꿰는 점선(랜딩 점선과 동일한 도트 스타일) ──────────
+   포스터의 월드 위치는 w = slot - progress 에만 의존하므로,
+   같은 나선(반지름 radius)을 따라 도트 점선을 한 번 깔아두면
+   스크롤해도 포스터들이 항상 이 점선 위에 꿰여 있는 것처럼 보인다. */
+let exhibitionThread = null;
+const _threadTmp = new THREE.Vector3();
+function exhibitionThreadPoint(w, out) {
+  const L = exhibitionLayout;
+  exhibitionRadial(L.phase0 + w * L.thetaStep, _radial);
+  // radius 보다 살짝 안쪽(축 방향) → 포스터 앞면 쪽으로 도트가 꿰여 나온다
+  return out.copy(L.axis).multiplyScalar(w * L.depthStep)
+            .addScaledVector(_radial, L.radius - 0.8);
+}
+// 점 자체를 '진짜 3D 구'로: InstancedMesh(저폴리 구 수백 개) → 렉 거의 없음
+let exhibitionThreadGeo = null;
+let exhibitionThreadMat = null;
+let exhibitionThreadLit = false;
+const _threadMat4 = new THREE.Matrix4();
+const _threadColor = new THREE.Color();
+const _threadColorDark = new THREE.Color(0.16, 0.16, 0.16);
+
+function buildExhibitionThread() {
+  const L = exhibitionLayout;
+  // 구 지오메트리/재질은 1회만 생성, 음영용 직사광도 1회만 추가
+  if (!exhibitionThreadGeo) exhibitionThreadGeo = new THREE.SphereGeometry(1, 12, 9);
+  if (!exhibitionThreadMat) exhibitionThreadMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 0.5, metalness: 0.0,
+  });
+  if (!exhibitionThreadLit) {
+    const key = new THREE.DirectionalLight(0xffffff, 1.35);
+    key.position.set(-0.5, 1.0, 0.85);
+    exhibitionScene.add(key);
+    exhibitionThreadLit = true;
+  }
+
+  const wStart = L.nearFadeEnd - 0.3;
+  const wEnd = L.farFadeEnd + 0.8;
+  const SAMPLES = 2600;
+  const spacing = 0.6;                 // 점 간격(월드 단위)
+  const dense = [];
+  for (let s = 0; s <= SAMPLES; s++) {
+    const w = wStart + (wEnd - wStart) * (s / SAMPLES);
+    dense.push({ p: exhibitionThreadPoint(w, _threadTmp).clone(), w });
+  }
+  const items = [];
+  const pushPt = (d) => {
+    const nf = smooth01(L.nearFadeEnd, L.nearFadeStart, d.w);
+    const ff = 1 - smooth01(L.farFadeStart, L.farFadeEnd, d.w);
+    const fade = Math.min(nf, ff);
+    if (fade < 0.04) return;            // 거의 안 보이는 양끝 점은 생략(흰 잔상/부하 방지)
+    const depthT = smooth01(L.nearFadeStart, L.farFadeEnd, d.w);
+    const vertical = d.p.dot(L.V);
+    const upT = THREE.MathUtils.clamp((vertical + L.radius) / (L.radius * 2), 0, 1);
+    const depthScale = THREE.MathUtils.lerp(2.1, 0.2, Math.pow(depthT, 0.82)); // 앞 크게/뒤 작게
+    const upScale = THREE.MathUtils.lerp(0.76, 1.72, Math.pow(upT, 0.72));
+    const scale = THREE.MathUtils.clamp(depthScale * upScale, 0.14, 3.2);
+    items.push({ p: d.p, fade, scale });
+  };
+  let acc = 0;
+  pushPt(dense[0]);
+  for (let i = 1; i < dense.length; i++) {
+    acc += dense[i].p.distanceTo(dense[i - 1].p);
+    if (acc >= spacing) { pushPt(dense[i]); acc = 0; }
+  }
+
+  if (exhibitionThread) { exhibitionScene.remove(exhibitionThread); exhibitionThread.dispose(); }
+  const SPHERE_BASE = 0.22;            // 점 구의 기본 반지름(월드)
+  const mesh = new THREE.InstancedMesh(exhibitionThreadGeo, exhibitionThreadMat, items.length);
+  mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const r = SPHERE_BASE * it.scale;
+    _threadMat4.makeScale(r, r, r);
+    _threadMat4.setPosition(it.p);
+    mesh.setMatrixAt(i, _threadMat4);
+    // 흰 배경으로의 페이드: fade 1 → 짙은 회색, 0 → 흰색(사라짐)
+    _threadColor.set(0xffffff).lerp(_threadColorDark, it.fade);
+    mesh.setColorAt(i, _threadColor);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  mesh.renderOrder = 5;                // 포스터(깊이)와 같은 Z축으로 정확히 가려짐
+  mesh.frustumCulled = false;
+  exhibitionThread = mesh;
+  exhibitionScene.add(exhibitionThread);
+}
+
+// 그룹 전체를 나사 운동(축 기준 회전 + 축 방향 전진)
+function applyExhibitionScrew() {
+  const L = exhibitionLayout;
+  _screwQuat.setFromAxisAngle(L.axis, -exhibitionProgress * L.thetaStep);
+  exhibitionGroup.quaternion.copy(_screwQuat);
+  exhibitionGroup.position.copy(L.axis).multiplyScalar(-exhibitionProgress * L.depthStep);
+}
+
+// 재활용: 모든 포스터를 카메라 기준 [nearFadeEnd, nearFadeEnd+N) 창 안으로 정규화
+function recycleExhibitionPosters() {
+  const L = exhibitionLayout;
+  const N = EXHIBITION_COUNT;
+  for (const p of exhibitionPosters) {
+    let w = p.slot - exhibitionProgress;
+    let changed = false;
+    while (w < L.nearFadeEnd) { p.slot += N; w += N; changed = true; }
+    while (w >= L.nearFadeEnd + N) { p.slot -= N; w -= N; changed = true; }
+    if (changed) placePoster(p);
+  }
+}
+
+function updateExhibitionPosters() {
+  const L = exhibitionLayout;
+  recycleExhibitionPosters();
+  for (const p of exhibitionPosters) {
+    const w = p.slot - exhibitionProgress;       // 카메라 기준 깊이(슬롯)
+    const nearFade = smooth01(L.nearFadeEnd, L.nearFadeStart, w);
+    const farFade = 1 - smooth01(L.farFadeStart, L.farFadeEnd, w);
+    const op = Math.min(nearFade, farFade);
+    const hoverTarget = p.index === exhibitionHoverIndex ? 1 : 0;
+    p.hover += (hoverTarget - p.hover) * 0.16;
+    p.frontMat.opacity = op;
+    p.backMat.opacity = op * 0.5;
+    p.group.visible = op > 0.003;
+    p.front.renderOrder = 1000 - Math.round(w * 10);
+    p.back.renderOrder = p.front.renderOrder - 1;
+  }
+  applyExhibitionScrew();
+}
+
+function updateExhibitionCamera() {
+  const L = exhibitionLayout;
+  // 카메라는 고정. 입구 뒤(−axis)로 물러나고 단면 세로축(V)으로 내려서
+  // 아래쪽 큰 포스터를 가까이 두고, 시선은 터널 안쪽 살짝 위를 본다.
+  exhibitionCamera.position
+    .copy(L.axis).multiplyScalar(-L.camBack)
+    .addScaledVector(L.V, L.camV);
+  _look.copy(L.axis).multiplyScalar(L.lookDepth)
+       .addScaledVector(L.V, L.lookV);
+  exhibitionCamera.up.set(0, 1, 0);
+  exhibitionCamera.lookAt(_look);
+}
+
+function updateExhibition() {
+  exhibitionProgress += (exhibitionProgressTarget - exhibitionProgress) * 0.09;
+  if (Math.abs(exhibitionProgressTarget - exhibitionProgress) < 0.0004) {
+    exhibitionProgress = exhibitionProgressTarget;
+  }
+  updateExhibitionCamera();
+  updateExhibitionPosters();
+  exhibitionRenderer.render(exhibitionScene, exhibitionCamera);
+}
+
+function updateExhibitionResponsive() {
+  const aspect = window.innerWidth / window.innerHeight;
+  const narrow = THREE.MathUtils.clamp((1.1 - aspect) / 0.7, 0, 1);
+  const L = exhibitionLayout;
+  L.radius = THREE.MathUtils.lerp(16, 12.5, narrow);
+  L.panelScale = THREE.MathUtils.lerp(2.0, 1.7, narrow);
+  L.camBack = THREE.MathUtils.lerp(11.5, 13.5, narrow);
+  L.camV = THREE.MathUtils.lerp(-10, -8.5, narrow);
+  L.lookDepth = THREE.MathUtils.lerp(30, 27, narrow);
+  const up = Math.abs(L.axis.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  L.U.copy(up).cross(L.axis).normalize();
+  L.V.copy(L.axis).cross(L.U).normalize();
+  exhibitionPosters.forEach(p => { p.group.scale.setScalar(L.panelScale); placePoster(p); });
+  // 점선/점 제거 — 포스터 이미지만 표시
+}
+
+function resizeExhibition() {
+  updateExhibitionResponsive();
+  exhibitionCamera.aspect = window.innerWidth / window.innerHeight;
+  exhibitionCamera.updateProjectionMatrix();
+  exhibitionRenderer.setSize(window.innerWidth, window.innerHeight);
+  updateExhibitionCamera();
+  updateExhibitionPosters();
+}
+
+/* ════════════════════════════════════════════════════════════
+   인터랙션
+   ════════════════════════════════════════════════════════════ */
+let scroll = 0, scrollEased = 0;
+let overlayOpen = false;
+let exhibitionOpen = false;
+window.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (overlayOpen) return;
+  if (exhibitionOpen) {
+    handleExhibitionScroll(e.deltaY);
+    return;
+  }
+  scroll += e.deltaY * 0.0009;
+}, { passive: false });
+
+let camYaw = 0, camPitch = 0;
+let yawTarget = 0, pitchTarget = 0;
+
+let dragging = false, lastX = 0, lastY = 0;
+let downX = 0, downY = 0, moved = 0;
+
+const startDrag = (x, y) => {
+  if (overlayOpen || exhibitionOpen) return;
+  dragging = true; lastX = x; lastY = y;
+  downX = x; downY = y; moved = 0;
+  document.body.classList.add('dragging');
+};
+const moveDrag  = (x, y) => {
+  if (!dragging || overlayOpen || exhibitionOpen) return;
+  const dx = x - lastX, dy = y - lastY;
+  lastX = x; lastY = y;
+  moved += Math.abs(dx) + Math.abs(dy);
+  yawTarget   -= dx * 0.006;
+  pitchTarget += dy * 0.006;
+  pitchTarget = Math.max(-1.2, Math.min(1.2, pitchTarget));
+};
+const endDrag = (x, y) => {
+  document.body.classList.remove('dragging');
+  if (dragging && moved < 6 && !overlayOpen && !exhibitionOpen) {
+    tryClickCard(x, y);
+  }
+  dragging = false;
+};
+
+window.addEventListener('mousedown', e => startDrag(e.clientX, e.clientY));
+window.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
+window.addEventListener('mouseup',   e => endDrag(e.clientX, e.clientY));
+window.addEventListener('touchstart', e => startDrag(e.touches[0].clientX, e.touches[0].clientY), {passive:true});
+window.addEventListener('touchmove',  e => moveDrag(e.touches[0].clientX, e.touches[0].clientY), {passive:true});
+window.addEventListener('touchend',   e => {
+  const t = e.changedTouches[0];
+  endDrag(t ? t.clientX : 0, t ? t.clientY : 0);
+});
+
+/* ════════════════════════════════════════════════════════════
+   카드 클릭 → 확대 + 문지르기 오버레이
+   ════════════════════════════════════════════════════════════ */
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+
+function tryClickCard(px, py) {
+  ndc.x = (px / window.innerWidth) * 2 - 1;
+  ndc.y = -(py / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+  const meshes = cards.map(c => c.mesh);
+  const hits = raycaster.intersectObjects(meshes, false);
+  if (hits.length) {
+    const idx = hits[0].object.userData.imgIndex;
+    if (RUB_ENABLED.has(idx)) openRub(idx);
+  }
+}
+
+/* ── 오버레이 / 문지르기 구현 ──────────────────────────────── */
+const overlay   = document.getElementById('overlay');
+const rubStage  = document.getElementById('rubStage');
+const rubCursor = document.getElementById('rubCursor');
+const captionEl = document.getElementById('caption');
+const capTextEl = captionEl.querySelector('.cap-text');
+const rubBtnEl  = captionEl.querySelector('.rub-btn');
+rubCursor.style.backgroundImage = `url(${CURSOR_PATH})`;
+
+let rubReady = false;   // 'Drag to rub' 클릭 후에만 문지르기/커서 활성
+
+let rubCanvas = null, rubCtx = null, rubbing = false;
+let rubOpenIdx = null;
+let rubAmount = 0;
+const RUB_THRESHOLD = 60;
+const converted = new Set();
+
+function openRub(idx) {
+  overlayOpen = true;
+  rubOpenIdx = idx;
+  rubAmount = 0;
+  dragging = false;
+  document.body.classList.remove('dragging');
+  document.body.classList.remove('exhibition-detail-open');
+
+  // 캡션 채우기 (이미지 번호별)
+  captionEl.classList.remove('no-rub');
+  capTextEl.textContent = captionFor(idx);
+  rubReady = false;                       // 새로 열릴 때마다 비활성 (버튼 클릭 필요)
+  if (rubBtnEl) rubBtnEl.style.opacity = '';
+
+  const topSrc = converted.has(idx) ? RUB_PATH(idx) : IMAGE_PATH(idx);
+  const baseImg = new Image();
+  const rubImg  = new Image();
+  let ready = 0;
+  const onReady = () => {
+    ready++;
+    if (ready < 2) return;
+    buildRubCanvas(baseImg, rubImg);
+  };
+  baseImg.onload = onReady;
+  baseImg.onerror = onReady;
+  rubImg.onload = onReady;
+  rubImg.onerror = onReady;
+  baseImg.src = topSrc;
+  rubImg.src  = RUB_PATH(idx);
+
+  overlay.classList.add('show');
+  document.body.classList.add('overlay-open');   // 뒤 씬 블러 켜기
+}
+
+function openExhibitionPoster(idx) {
+  overlayOpen = true;
+  rubOpenIdx = null;
+  rubAmount = 0;
+  rubReady = false;
+  rubbing = false;
+  dragging = false;
+  clearExhibitionHover();
+  document.body.classList.remove('dragging');
+  document.body.classList.remove('rub-active');
+
+  captionEl.classList.add('no-rub');
+  capTextEl.textContent = exhibitionCaptionFor(idx);
+  if (rubBtnEl) rubBtnEl.style.opacity = '';
+
+  rubStage.innerHTML = '';
+  captionEl.style.width = '0px';
+  rubCanvas = null;
+  rubCtx = null;
+
+  const posterImg = new Image();
+  const onReady = () => buildImageStage(posterImg);
+  posterImg.onload = onReady;
+  posterImg.onerror = onReady;
+  posterImg.src = EXHIBITION_POSTER_PATH(idx);
+
+  overlay.classList.add('show');
+  document.body.classList.add('overlay-open');
+  document.body.classList.add('exhibition-detail-open');
+}
+
+function buildRubCanvas(baseImg, rubImg) {
+  rubStage.innerHTML = '';
+  // 이미지를 화면에서 적당히 크게 (josularrea 비율감) + 사방 여백 유지
+  const maxW = window.innerWidth * 0.52;
+  const maxH = window.innerHeight * 0.72;
+  const iw = baseImg.naturalWidth  || 1000;
+  const ih = baseImg.naturalHeight || 1400;
+  const scale = Math.min(maxW / iw, maxH / ih);
+  const w = iw * scale, h = ih * scale;
+
+  rubStage.style.width  = w + 'px';
+  rubStage.style.height = h + 'px';
+
+  // 캡션 너비를 이미지 너비와 동일하게 → 왼끝이 이미지 왼끝과 정확히 맞음
+  captionEl.style.width = w + 'px';
+
+  const bottom = document.createElement('canvas');
+  bottom.width = w; bottom.height = h;
+  bottom.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;';
+  const bctx = bottom.getContext('2d');
+  if (rubImg.naturalWidth) bctx.drawImage(rubImg, 0, 0, w, h);
+  else { bctx.fillStyle = '#e8e4dc'; bctx.fillRect(0,0,w,h); }
+
+  const top = document.createElement('canvas');
+  top.width = w; top.height = h;
+  top.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;';
+  const tctx = top.getContext('2d');
+  if (baseImg.naturalWidth) tctx.drawImage(baseImg, 0, 0, w, h);
+
+  rubStage.appendChild(bottom);
+  rubStage.appendChild(top);
+
+  rubCanvas = top; rubCtx = tctx;
+}
+
+function buildImageStage(img) {
+  rubStage.innerHTML = '';
+  const maxW = window.innerWidth * 0.52;
+  const maxH = window.innerHeight * 0.72;
+  const iw = img.naturalWidth || 1000;
+  const ih = img.naturalHeight || 1400;
+  const scale = Math.min(maxW / iw, maxH / ih);
+  const w = iw * scale;
+  const h = ih * scale;
+
+  rubStage.style.width = w + 'px';
+  rubStage.style.height = h + 'px';
+  captionEl.style.width = w + 'px';
+
+  const el = document.createElement('img');
+  el.src = img.src;
+  el.alt = '';
+  el.style.width = '100%';
+  el.style.height = '100%';
+  el.style.objectFit = 'contain';
+  rubStage.appendChild(el);
+}
+
+function rubAt(clientX, clientY) {
+  if (!rubCanvas) return;
+  const r = rubCanvas.getBoundingClientRect();
+  const x = (clientX - r.left) * (rubCanvas.width / r.width);
+  const y = (clientY - r.top)  * (rubCanvas.height / r.height);
+  if (x < 0 || y < 0 || x > rubCanvas.width || y > rubCanvas.height) return;
+  rubAmount++;
+  rubCtx.save();
+  rubCtx.globalCompositeOperation = 'destination-out';
+
+  const dots = 14;
+  for (let i = 0; i < dots; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const rr = Math.sqrt(Math.random()) * RUB_RADIUS;
+    const dx = x + Math.cos(a) * rr;
+    const dy = y + Math.sin(a) * rr;
+    const dotR = RUB_RADIUS * (0.18 + Math.random() * 0.22);
+    const g = rubCtx.createRadialGradient(dx, dy, 0, dx, dy, dotR);
+    g.addColorStop(0, 'rgba(0,0,0,0.28)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    rubCtx.fillStyle = g;
+    rubCtx.beginPath();
+    rubCtx.arc(dx, dy, dotR, 0, Math.PI * 2);
+    rubCtx.fill();
+  }
+  rubCtx.restore();
+}
+
+overlay.addEventListener('mousedown', (e) => {
+  if (!rubReady) return;
+  rubbing = true; rubAt(e.clientX, e.clientY);
+});
+overlay.addEventListener('mousemove', (e) => {
+  if (!rubReady) return;
+  rubCursor.style.left = e.clientX + 'px';
+  rubCursor.style.top  = e.clientY + 'px';
+  if (rubbing) rubAt(e.clientX, e.clientY);
+});
+window.addEventListener('mouseup', () => { rubbing = false; });
+overlay.addEventListener('mouseenter', () => { if (rubReady) rubCursor.classList.add('show'); });
+overlay.addEventListener('mouseleave', () => rubCursor.classList.remove('show'));
+overlay.addEventListener('touchstart', (e) => {
+  if (!rubReady) return;
+  rubbing = true; const t = e.touches[0];
+  rubCursor.classList.add('show');
+  rubCursor.style.left = t.clientX+'px'; rubCursor.style.top = t.clientY+'px';
+  rubAt(t.clientX, t.clientY);
+}, {passive:true});
+overlay.addEventListener('touchmove', (e) => {
+  if (!rubReady) return;
+  const t = e.touches[0];
+  rubCursor.style.left = t.clientX+'px'; rubCursor.style.top = t.clientY+'px';
+  if (rubbing) rubAt(t.clientX, t.clientY);
+}, {passive:true});
+overlay.addEventListener('touchend', () => { rubbing = false; });
+
+// 'Drag to rub' 클릭 → 이제부터 커서 + 문지르기 활성
+function activateRub() {
+  rubReady = true;
+  document.body.classList.add('rub-active');
+  rubCursor.classList.add('show');
+  if (rubBtnEl) rubBtnEl.style.opacity = '0.4';   // 활성화되면 버튼 살짝 죽임
+}
+if (rubBtnEl) {
+  rubBtnEl.addEventListener('click', (e) => { e.stopPropagation(); activateRub(); });
+  rubBtnEl.addEventListener('touchstart', (e) => { e.stopPropagation(); activateRub(); }, {passive:true});
+}
+
+overlay.addEventListener('click', (e) => {
+  if (e.target === overlay) closeRub();
+});
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeRub(); });
+
+function closeRub() {
+  if (!overlayOpen) return;
+
+  if (rubOpenIdx != null && rubAmount >= RUB_THRESHOLD && !converted.has(rubOpenIdx)) {
+    convertCardToRub(rubOpenIdx);
+  }
+
+  overlay.classList.remove('show');
+  document.body.classList.remove('overlay-open');  // 뒤 씬 블러 끄기
+  document.body.classList.remove('exhibition-detail-open');
+  document.body.classList.remove('rub-active');    // 시스템 커서 복원
+  captionEl.classList.remove('no-rub');
+  rubReady = false;
+  rubCursor.classList.remove('show');
+  rubbing = false;
+  setTimeout(() => { rubStage.innerHTML = ''; rubCanvas = null; rubCtx = null; }, 460);
+  overlayOpen = false;
+  rubOpenIdx = null;
+}
+
+function convertCardToRub(idx) {
+  converted.add(idx);
+  const card = cards.find(c => c.mesh.userData.imgIndex === idx);
+  if (!card) return;
+  loader.load(RUB_PATH(idx), (tex) => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    card.mat.map = tex;
+    card.mat.needsUpdate = true;
+    const img = tex.image;
+    if (img && img.width && img.height) {
+      card.mesh.scale.set(1, 1, 1);
+      const ar = img.width / img.height;
+      const targetAr = CARD_W / CARD_H;
+      if (ar > targetAr) card.mesh.scale.y = targetAr / ar;
+      else card.mesh.scale.x = ar / targetAr;
+    }
+  });
+}
+
+/* ════════════════════════════════════════════════════════════
+   카메라
+   ════════════════════════════════════════════════════════════ */
+function computeCamRadius() {
+  const vFov = camera.fov * Math.PI / 180;
+  const fitH = SPHERE_R / Math.sin(vFov / 2);
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (window.innerWidth / window.innerHeight));
+  const fitW = SPHERE_R / Math.sin(hFov / 2);
+  return Math.max(fitH, fitW) * 1.06;
+}
+let camRadius = computeCamRadius();
+let autoAngle = 0;
+
+// 나선 확대/축소: zoomTarget 을 +/- 버튼으로 조절. 작을수록 카메라가 가까워져 나선이 커짐
+let zoom = 1, zoomTarget = 1;
+const ZOOM_MIN = 0.45, ZOOM_MAX = 2.2, ZOOM_STEP = 0.15;
+
+function updateCamera(autoSpin) {
+  camYaw   += (yawTarget   - camYaw)   * 0.08;
+  camPitch += (pitchTarget - camPitch) * 0.08;
+  zoom     += (zoomTarget  - zoom)     * 0.12;   // 줌 부드럽게 따라가기
+
+  const r = camRadius * zoom;
+  const yaw = camYaw + autoSpin;
+  const cp = Math.cos(camPitch), sp = Math.sin(camPitch);
+  camera.position.set(
+    Math.cos(yaw) * cp * r,
+    sp * r,
+    Math.sin(yaw) * cp * r
+  );
+  camera.lookAt(0, 0, 0);
+}
+
+/* ════════════════════════════════════════════════════════════
+   렌더 루프
+   ════════════════════════════════════════════════════════════ */
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const time = clock.getElapsedTime();
+
+  scrollEased += (scroll - scrollEased) * 0.06;
+
+  const breathe = Math.sin(time * 0.25) * 0.5;
+  const dynTurns = TURNS + Math.sin(scrollEased * 1.4) * 1.6 + breathe * 0.3;
+  const dynBulge = MID_BULGE + Math.sin(scrollEased * 0.9) * 0.06 + breathe * 0.015;
+  updateHelixLine(dynTurns, dynBulge);
+
+  const flow = scrollEased * 0.18;
+
+  if (!dragging) autoAngle += 0.0014;
+  updateCamera(autoAngle);
+
+  const camPos = camera.position;
+
+  cards.forEach(c => {
+    let ft = (c.baseT + flow) % 1;
+    if (ft < 0) ft += 1;
+    const t2 = CARD_T_START + ft * (CARD_T_END - CARD_T_START);
+    const p = helixPoint(t2, dynTurns, dynBulge);
+
+    const fx = Math.sin(time * c.fSpd + c.fPhase) * c.fAmp;
+    const fy = Math.cos(time * c.fSpd * 0.8 + c.fPhase2) * c.fAmp * 0.9;
+    const fz = Math.sin(time * c.fSpd * 0.6 + c.fPhase) * c.fAmp;
+    c.mesh.position.set(p.x + fx, p.y + fy, p.z + fz);
+
+    const faceAngle = Math.atan2(p.x, p.z);
+    c.mesh.rotation.set(
+      c.tiltPitch + Math.sin(time * c.fSpd + c.fPhase) * c.swayAmp,
+      faceAngle + c.tiltYaw + Math.cos(time * c.fSpd * 0.7 + c.fPhase2) * c.swayAmp,
+      c.tiltRoll + Math.sin(time * c.fSpd * 0.5 + c.fPhase) * c.swayAmp * 0.6,
+      'YXZ'
+    );
+
+    const poleFade = THREE.MathUtils.clamp(Math.sin(ft * Math.PI) * 2.2, 0.15, 1);
+    const d = c.mesh.position.distanceTo(camPos);
+    const distFade = THREE.MathUtils.clamp(1 - (d - (camRadius * zoom - SPHERE_R)) / 60, 0.18, 1);
+    const op = poleFade * distFade * c.hoverMul;
+    c.mat.opacity += (op - c.mat.opacity) * 0.1;
+  });
+
+  renderer.render(scene, camera);
+  if (exhibitionOpen) updateExhibition(time);
+}
+animate();
+
+/* ════════════════════════════════════════════════════════════
+   왼쪽 아래 "Last updated" — 임의 랜덤 날짜/시간
+   ── 지난주(7일 전)부터 오늘 사이의 랜덤 시각을 만들어 계속 바뀌게 함
+   ── (나중에 이미지별 collection date 값으로 교체하면 됨)
+   형식: 24 / FEB / 2026   [12:35:35]
+   ════════════════════════════════════════════════════════════ */
+const updatedValue = document.getElementById('updatedValue');
+const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
+function pad(n) { return String(n).padStart(2, '0'); }
+
+function randomUpdatedString() {
+  const now = Date.now();
+  const weekAgo = now - 7 * 24 * 60 * 60 * 1000;   // 지난주부터 오늘까지
+  const t = new Date(weekAgo + Math.random() * (now - weekAgo));
+  const dd = pad(t.getDate());
+  const mon = MONTHS[t.getMonth()];
+  const yyyy = t.getFullYear();
+  const hh = pad(t.getHours());
+  const mm = pad(t.getMinutes());
+  const ss = pad(t.getSeconds());
+  return `${dd} . ${mon} . ${yyyy}   [${hh}:${mm}:${ss}]`;
+}
+
+function refreshUpdated() {
+  if (updatedValue) updatedValue.textContent = randomUpdatedString();
+}
+refreshUpdated();
+setInterval(refreshUpdated, 1500);   // 일정 간격으로 계속 바뀜
+
+/* ════════════════════════════════════════════════════════════
+   오른쪽 카테고리 호버 → 해당 이미지만 강조, 나머지는 흐리게
+   ── CATEGORY_MAP: 각 카테고리에 속하는 이미지 번호(1~30). 일단 임의 분배.
+      나중에 실제 분류 데이터로 교체하면 됨.
+   ════════════════════════════════════════════════════════════ */
+const CATEGORY_MAP = {
+  stone:        [1, 5, 9, 14, 21, 27],
+  brick:        [2, 7, 12, 18, 25],
+  cut_flower:   [3, 8, 16, 22, 29],
+  speed_bump:   [4, 11, 17, 24],
+  gate:         [6, 13, 20, 28],
+  asphalt:      [10, 15, 23, 30],
+  wood:         [19, 26],
+  metal_object: [1, 6, 11, 16, 21, 26],
+  soil:         [3, 9, 14, 19, 24, 29],
+};
+const DIM = 0.12;   // 호버 시 비대상 이미지의 흐린 정도 (0=완전 투명, 1=정상)
+
+function applyHover(catKey) {
+  const set = catKey ? new Set(CATEGORY_MAP[catKey] || []) : null;
+  cards.forEach(c => {
+    if (!set) { c.hoverMul = 1; return; }              // 호버 해제 → 전체 정상
+    c.hoverMul = set.has(c.mesh.userData.imgIndex) ? 1 : DIM;
+  });
+}
+
+const catsEl = document.getElementById('cats');
+catsEl.querySelectorAll('div[data-cat]').forEach(el => {
+  el.addEventListener('mouseenter', () => {
+    catsEl.classList.add('has-hover');
+    applyHover(el.getAttribute('data-cat'));
+  });
+  el.addEventListener('mouseleave', () => {
+    catsEl.classList.remove('has-hover');
+    applyHover(null);                                  // 라벨에서 벗어나면 전체 정상
+  });
+});
+
+/* ── 나선 확대/축소 버튼 ─────────────────────────────────────
+   + : 카메라가 가까워져 나선이 커짐 (zoomTarget 감소)
+   − : 카메라가 멀어져 나선이 작아짐 (zoomTarget 증가)
+   텍스트 크기는 HTML 고정이라 영향 없음 */
+const zoomInBtn  = document.getElementById('zoomIn');
+const zoomOutBtn = document.getElementById('zoomOut');
+function clampZoom(v) { return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v)); }
+if (zoomInBtn)  zoomInBtn.addEventListener('click',  () => { zoomTarget = clampZoom(zoomTarget - ZOOM_STEP); });
+if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => { zoomTarget = clampZoom(zoomTarget + ZOOM_STEP); });
+
+/* ── 상단 Exhibition → 같은 페이지 안에서 새 화면으로 전환 ───────── */
+const topNav = document.getElementById('topNav');
+const exhibitionLink = document.getElementById('exhibitionLink');
+const exhibitionScreen = document.getElementById('exhibitionScreen');
+const exhibitionBack = document.getElementById('exhibitionBack');
+
+function openExhibition() {
+  if (overlayOpen) closeRub();
+  exhibitionOpen = true;
+  dragging = false;
+  document.body.classList.remove('dragging');
+  document.body.classList.add('exhibition-open');
+  exhibitionScreen.classList.add('show');
+  exhibitionScreen.setAttribute('aria-hidden', 'false');
+  resizeExhibition();
+  resetExhibitionMotion();
+}
+
+function closeExhibition() {
+  if (overlayOpen) closeRub();
+  exhibitionPressActive = false;
+  exhibitionOpen = false;
+  document.body.classList.remove('exhibition-open');
+  exhibitionScreen.classList.remove('show');
+  exhibitionScreen.setAttribute('aria-hidden', 'true');
+}
+
+if (topNav) {
+  topNav.addEventListener('mousedown', e => e.stopPropagation());
+  topNav.addEventListener('touchstart', e => e.stopPropagation(), {passive:true});
+}
+if (exhibitionScreen) {
+  exhibitionScreen.addEventListener('mousedown', e => {
+    e.stopPropagation();
+    if (e.target !== exhibitionBack) startExhibitionPress(e.clientX, e.clientY);
+  });
+  exhibitionScreen.addEventListener('mousemove', e => {
+    e.stopPropagation();
+    moveExhibitionPress(e.clientX, e.clientY);
+    updateExhibitionHover(e);
+  });
+  exhibitionScreen.addEventListener('mouseleave', () => clearExhibitionHover());
+  exhibitionScreen.addEventListener('touchstart', e => {
+    e.stopPropagation();
+    clearExhibitionHover();
+    exhibitionTouchY = e.touches[0] ? e.touches[0].clientY : 0;
+    if (e.target !== exhibitionBack && e.touches[0]) {
+      startExhibitionPress(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }, {passive:true});
+  exhibitionScreen.addEventListener('touchmove', e => {
+    e.stopPropagation();
+    const touch = e.touches[0];
+    if (!touch) return;
+    moveExhibitionPress(touch.clientX, touch.clientY);
+    const deltaY = exhibitionTouchY - touch.clientY;
+    if (Math.abs(deltaY) > 2) {
+      handleExhibitionScroll(deltaY);
+      exhibitionTouchY = touch.clientY;
+    }
+  }, {passive:true});
+  exhibitionScreen.addEventListener('touchend', e => {
+    e.stopPropagation();
+    const touch = e.changedTouches[0];
+    if (touch) endExhibitionPress(touch.clientX, touch.clientY);
+  }, {passive:true});
+}
+if (exhibitionLink) exhibitionLink.addEventListener('click', openExhibition);
+if (exhibitionBack) exhibitionBack.addEventListener('click', closeExhibition);
+window.addEventListener('mouseup', e => {
+  if (exhibitionOpen) endExhibitionPress(e.clientX, e.clientY);
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camRadius = computeCamRadius();
+  resizeExhibition();
+});
+</script>
+
+</body>
+</html>
