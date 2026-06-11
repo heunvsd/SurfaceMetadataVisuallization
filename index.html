@@ -205,7 +205,7 @@
   }
   /* 오버레이가 열리면 뒤 나선 씬 자체를 흐리게 → 도는 모습이 블러된 채 비침 */
   body.overlay-open #scene { filter: blur(2px); }
-  body.exhibition-detail-open #overlay { z-index: 150; }
+  body.exhibition-detail-open #overlay { z-index: 150; background: transparent; }
   body.exhibition-detail-open #exhibitionScreen { filter: blur(2px); }
   #overlay.show { opacity: 1; pointer-events: auto; }
   /* 확대된 이미지가 들어가는 무대 (문지르기 캔버스) */
